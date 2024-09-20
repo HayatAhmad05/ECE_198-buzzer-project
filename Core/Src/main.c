@@ -68,7 +68,7 @@ int main(void)
 
   /* USER CODE BEGIN 1 */
 
-//	GPIO_PinState state;
+	GPIO_PinState state;
 	uint8_t X = 0;
 
   /* USER CODE END 1 */
