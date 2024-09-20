@@ -105,7 +105,7 @@ int main(void)
   uint8_t flag = 0;
   while (1)
   {
-//	  printf("Hello World! %u \r\n", X);
+	  printf("Hello World! %u \r\n", X);
 
 	  if (HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_8)) {
 		  flag = 1;
