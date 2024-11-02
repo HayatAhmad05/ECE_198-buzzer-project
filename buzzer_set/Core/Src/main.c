@@ -97,6 +97,21 @@ static void MX_USART1_UART_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+void handle_button_press(int index) {
+    if (input_enabled) {
+    	GPIO_PinConfig led = led_pins[index];
+
+        HAL_GPIO_WritePin(led.Port, led.Pin, GPIO_PIN_SET);
+        input_enabled = 0;
+    }
+}
+
+void reset_inputs() {
+    for (int i = 0; i < NUM_INPUTS; i++) {
+        HAL_GPIO_WritePin(led_pins[i].Port, led_pins[i].Pin, GPIO_PIN_RESET);
+    }
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -142,6 +157,22 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+      if (input_enabled && HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_10) == GPIO_PIN_RESET) {
+	printf("so it is reset \r\n");
+	handle_button_press(GPIO_PIN_10);
+      }
+
+      // Check each button pin for a press if inputs are enabled
+      if (input_enabled) {
+	for (int i = 0; i < NUM_INPUTS; i++) {
+	  if (HAL_GPIO_ReadPin(button_led_pins[i].Port, button_led_pins[i].Pin) == GPIO_PIN_RESET) {
+	    printf("%d button is clicked \r\n", i);
+
+	    handle_button_press(i);
+	    break;
+	  }
+	}
+      }
   }
   /* USER CODE END 3 */
 }
