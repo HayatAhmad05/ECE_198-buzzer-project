@@ -69,15 +69,15 @@ const GPIO_PinConfig button_led_pins[NUM_INPUTS] = {
 
 const GPIO_PinConfig led_pins[NUM_INPUTS] = {
   // corresponds to blue buttons in order
-	{GPIOA, GPIO_PIN_6},
-	{GPIOB, GPIO_PIN_14},
-	{GPIOC, GPIO_PIN_6},
-	{GPIOC, GPIO_PIN_8},
+    {GPIOA, GPIO_PIN_6},
+    {GPIOB, GPIO_PIN_14},
+    {GPIOC, GPIO_PIN_6},
+    {GPIOC, GPIO_PIN_8},
   // corresponds to red buttons in order
-	{GPIOB, GPIO_PIN_13},
-	{GPIOB, GPIO_PIN_12},
-	{GPIOA, GPIO_PIN_11},
-	{GPIOA, GPIO_PIN_12},
+    {GPIOB, GPIO_PIN_13},
+    {GPIOB, GPIO_PIN_12},
+    {GPIOA, GPIO_PIN_11},
+    {GPIOA, GPIO_PIN_12},
 };
 
 volatile uint8_t input_enabled = 0;
