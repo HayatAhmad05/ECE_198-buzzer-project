@@ -158,8 +158,70 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-      printf("Hello world! \r\n");
-      HAL_Delay(100);
+	// Start button pressed: begin countdown, enable all LEDs, play sound
+	if (!started && countdown_index >= 0 && HAL_GPIO_ReadPin(GPIOB, START_BUTTON_PIN) == GPIO_PIN_RESET) {
+	  printf("Start button is pressed. \r\n");
+
+	  started = 1;
+
+	  for (int i = 0; i < NUM_LEDS; ++i) {
+	    HAL_GPIO_WritePin(led_pins[i].Port, led_pins[i].Pin, GPIO_PIN_SET);
+	  }
+
+	  countdown_index = 0;
+	  countdown_timer = HAL_GetTick(); // Initialize timer
+	}
+
+	// Non-blocking LED countdown logic
+	if (countdown_index < NUM_LEDS && HAL_GetTick() - countdown_timer >= 1000 && started) {
+	  HAL_GPIO_WritePin(led_pins[countdown_index].Port, led_pins[countdown_index].Pin, GPIO_PIN_RESET); // Turn off LED
+	  countdown_timer = HAL_GetTick(); // Reset timer for next LED
+	  countdown_index++;
+	}
+	
+	if (countdown_index >= NUM_LEDS && started) {
+	  started = 0;
+	  buzzer_tick = HAL_GetTick() - 400;
+
+	  Tone(800);
+	  Start_PWM(&htim2, TIM_CHANNEL_2);
+	}
+
+	if (HAL_GetTick() - buzzer_tick >= 800) {
+	  Stop_PWM(&htim2, TIM_CHANNEL_2);
+	}
+
+	if (!reset_down && HAL_GPIO_ReadPin(GPIOB, RESET_BUTTON_PIN) == GPIO_PIN_RESET) {
+	    printf("Reset button is pressed. \r\n");
+	    Tone(500);
+	    Start_PWM(&htim2, TIM_CHANNEL_2);
+
+	    buzzer_tick = HAL_GetTick() - 750;
+
+	    // reset all the states
+
+	    X = 0;
+	    last_tick = HAL_GetTick();
+	    if (countdown_index >= 0) {
+	      countdown_index = 0;
+	      countdown_timer = 0;
+	      started = 0;
+	      for (size_t i = 0; i < NUM_LEDS; ++i) {
+		HAL_GPIO_WritePin(led_pins[i].Port, led_pins[i].Pin, GPIO_PIN_RESET);
+	      }
+	    } else {
+	      // previous reset had timer still going
+	      started = 1;
+	      countdown_index = MAX(abs(countdown_index) - 11, 0);
+	      countdown_timer = 0;
+	    }
+
+	    reset_down = 1;
+	}
+
+	if (reset_down && HAL_GPIO_ReadPin(GPIOB, RESET_BUTTON_PIN) != GPIO_PIN_RESET) {
+	  reset_down = 0;
+	}
   }
   /* USER CODE END 3 */
 }
