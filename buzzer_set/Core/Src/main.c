@@ -37,50 +37,47 @@ typedef struct {
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define NUM_LEDS 10
+#define START_BUTTON_PIN GPIO_PIN_5 // GPIOB
+#define RESET_BUTTON_PIN GPIO_PIN_13 // GPIOB
 
-#define NUM_INPUTS 8
+#define BUZZER_PIN GPIO_PIN_8
 
+#define LED_PORT GPIOA
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-
+#define MAX(X, Y) (((X) > (Y)) ? (X) : (Y))
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+TIM_HandleTypeDef htim2;
+TIM_HandleTypeDef htim3;
+
 UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 
-const GPIO_PinConfig button_led_pins[NUM_INPUTS] = {
-	// blue pins
-    {GPIOB, GPIO_PIN_9},
-    {GPIOB, GPIO_PIN_5},
-    {GPIOB, GPIO_PIN_4},
-    {GPIOA, GPIO_PIN_8},
-
-	// red pins
+// LED pin array
+const GPIO_PinConfig led_pins[NUM_LEDS] = {
+    {GPIOA, GPIO_PIN_15},
     {GPIOB, GPIO_PIN_10},
+    {GPIOA, GPIO_PIN_8},
+    {GPIOB, GPIO_PIN_9},
     {GPIOC, GPIO_PIN_7},
     {GPIOB, GPIO_PIN_6},
-    {GPIOA, GPIO_PIN_7}
-};
-
-const GPIO_PinConfig led_pins[NUM_INPUTS] = {
-  // corresponds to blue buttons in order
+    {GPIOA, GPIO_PIN_7},
     {GPIOA, GPIO_PIN_6},
-    {GPIOB, GPIO_PIN_14},
-    {GPIOC, GPIO_PIN_6},
     {GPIOC, GPIO_PIN_8},
-  // corresponds to red buttons in order
-    {GPIOB, GPIO_PIN_13},
-    {GPIOB, GPIO_PIN_12},
-    {GPIOA, GPIO_PIN_11},
-    {GPIOA, GPIO_PIN_12},
+    {GPIOC, GPIO_PIN_6}
 };
 
-volatile uint8_t input_enabled = 0;
+// Timer to keep track of countdown timing
+volatile uint32_t countdown_timer = 0;
+volatile int countdown_index = 0;
+volatile uint32_t buzzer_tick = 0;
 
 
 /* USER CODE END PV */
@@ -89,7 +86,9 @@ volatile uint8_t input_enabled = 0;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_TIM3_Init(void);
 static void MX_USART1_UART_Init(void);
+static void MX_TIM2_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -97,19 +96,25 @@ static void MX_USART1_UART_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-void handle_button_press(int index) {
-    if (input_enabled) {
-    	GPIO_PinConfig led = led_pins[index];
+// code is 0 for start
+// code is 1 for timer run out
+// code is 2 for reset
+// code is 3 for reset + enable output
 
-        HAL_GPIO_WritePin(led.Port, led.Pin, GPIO_PIN_SET);
-        input_enabled = 0;
-    }
+uint8_t tx_buff[] = {2};
+uint8_t rx_buff[1];
+
+static void Tone(uint32_t Frequency) {
+    TIM2->ARR = (1000000UL / Frequency) - 1; // Set The PWM Frequency
+    TIM2->CCR1 = (TIM2->ARR >> 1); // Set Duty Cycle 50%
 }
 
-void reset_inputs() {
-    for (int i = 0; i < NUM_INPUTS; i++) {
-        HAL_GPIO_WritePin(led_pins[i].Port, led_pins[i].Pin, GPIO_PIN_RESET);
-    }
+void Start_PWM(TIM_HandleTypeDef *htim, uint32_t channel) {
+    HAL_TIM_PWM_Start(htim, channel);
+}
+
+void Stop_PWM(TIM_HandleTypeDef *htim, uint32_t channel) {
+    HAL_TIM_PWM_Stop(htim, channel);
 }
 
 /* USER CODE END 0 */
@@ -122,8 +127,12 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
+//	GPIO_PinState state;
+	uint8_t X = 0;
 	uint32_t last_tick = HAL_GetTick();
-	input_enabled = 0;
+	uint8_t started = 0;
+	countdown_index = 0;
+	uint8_t reset_down = 0;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -145,9 +154,11 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART2_UART_Init();
+  MX_TIM3_Init();
   MX_USART1_UART_Init();
+  MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
-
+  Tone(500);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -157,22 +168,119 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-      if (input_enabled && HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_10) == GPIO_PIN_RESET) {
-	printf("so it is reset \r\n");
-	handle_button_press(GPIO_PIN_10);
-      }
-
-      // Check each button pin for a press if inputs are enabled
-      if (input_enabled) {
-	for (int i = 0; i < NUM_INPUTS; i++) {
-	  if (HAL_GPIO_ReadPin(button_led_pins[i].Port, button_led_pins[i].Pin) == GPIO_PIN_RESET) {
-	    printf("%d button is clicked \r\n", i);
-
-	    handle_button_press(i);
-	    break;
+	  if (HAL_GetTick() - last_tick >= 1000) {
+		  last_tick = HAL_GetTick();  // Update the last tick
+		  printf("Hello World! %u \r\n", X);
+		  ++X;
 	  }
-	}
-      }
+
+	  // Start button pressed: begin countdown, enable all LEDs, play sound
+	  if (!started && countdown_index >= 0 && HAL_GPIO_ReadPin(GPIOB, START_BUTTON_PIN) == GPIO_PIN_RESET) {
+		  printf("Start button is pressed. \r\n");
+
+		  tx_buff[0] = 0;
+		  HAL_UART_Transmit(&huart1, tx_buff, 1, 100);
+
+		  started = 1;
+
+		  for (int i = 0; i < NUM_LEDS; ++i) {
+			  HAL_GPIO_WritePin(led_pins[i].Port, led_pins[i].Pin, GPIO_PIN_SET);
+		  }
+
+		  countdown_index = 0;
+		  countdown_timer = HAL_GetTick(); // Initialize timer
+	  }
+
+	  // Non-blocking LED countdown logic
+	  if (countdown_index < NUM_LEDS && HAL_GetTick() - countdown_timer >= 1000 && started) {
+		  HAL_GPIO_WritePin(led_pins[countdown_index].Port, led_pins[countdown_index].Pin, GPIO_PIN_RESET); // Turn off LED
+		  countdown_timer = HAL_GetTick(); // Reset timer for next LED
+//		  printf("Increment! \r\n");
+		  countdown_index++;
+	  }
+
+	  if (countdown_index >= NUM_LEDS && started) {
+//		  printf("Huh? %u \r\n", countdown_index);
+		  started = 0;
+		  buzzer_tick = HAL_GetTick() - 400;
+
+		  tx_buff[0] = 1;
+		  HAL_UART_Transmit(&huart1, tx_buff, 1, 100);
+
+//		  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_SET); // Turn on buzzer
+		  Tone(800);
+		  Start_PWM(&htim2, TIM_CHANNEL_2);
+	  }
+
+	  if (HAL_GetTick() - buzzer_tick >= 800) {
+//		  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET); // Turn off buzzer
+		  Stop_PWM(&htim2, TIM_CHANNEL_2);
+//		  HAL_NVIC_SystemReset();
+	  }
+
+	  // Disable inputs after countdown
+//	  if (countdown_index >= NUM_LEDS) {
+//		  HAL_GPIO_WritePin(COMM_PORT, COMM_PIN, GPIO_PIN_RESET); // Disable further inputs
+//	  }
+	  if (HAL_UART_Receive(&huart1, rx_buff, 1, 10) == HAL_OK) {
+		  printf("rx_buff contents: ");
+		  if (rx_buff[0] == 2) {
+			  buzzer_tick = HAL_GetTick();
+//			  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_SET); // Turn on buzzer
+			  Tone(1200);
+			  Start_PWM(&htim2, TIM_CHANNEL_2);
+			  started = 0; // stop the counter
+			  countdown_index = -(countdown_index + 10);
+		  }
+
+		  for (size_t i = 0; i < sizeof(rx_buff); i++) {
+//			  printf("%u ", rx_buff[i]); // Print as decimal
+			  printf("0x%02X ", rx_buff[i]); // Print as hexadecimal
+		  }
+		  printf(" \r\n");
+	  }
+
+	  // Reset button handling
+	  if (!reset_down && HAL_GPIO_ReadPin(GPIOB, RESET_BUTTON_PIN) == GPIO_PIN_RESET) {
+		  printf("Reset button is pressed. \r\n");
+//		  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_SET); // Turn on buzzer
+		  Tone(500);
+		  Start_PWM(&htim2, TIM_CHANNEL_2);
+		  tx_buff[0] = 2;
+
+		  buzzer_tick = HAL_GetTick() - 750;
+
+		  // reset all the states
+
+		  X = 0;
+		  last_tick = HAL_GetTick();
+		  if (countdown_index >= 0) {
+			  countdown_index = 0;
+			  countdown_timer = 0;
+			  started = 0;
+			  for (size_t i = 0; i < NUM_LEDS; ++i) {
+				  HAL_GPIO_WritePin(led_pins[i].Port, led_pins[i].Pin, GPIO_PIN_RESET);
+			  }
+			  HAL_UART_Transmit(&huart1, tx_buff, 1, 100);
+		  } else {
+			  // previous reset had timer still going
+			  started = 1;
+			  countdown_index = MAX(abs(countdown_index) - 11, 0);
+			  countdown_timer = 0;
+			  HAL_UART_Transmit(&huart1, tx_buff, 3, 100);
+		  }
+
+		  reset_down = 1;
+
+//		  buzzer_tick = 0;
+
+//		  HAL_NVIC_SystemReset();
+	  }
+
+	  // wait until button is released
+	  if (reset_down && HAL_GPIO_ReadPin(GPIOB, RESET_BUTTON_PIN) != GPIO_PIN_RESET) {
+		  reset_down = 0;
+	  }
   }
   /* USER CODE END 3 */
 }
@@ -199,9 +307,9 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
-  RCC_OscInitStruct.PLL.PLLM = 16;
-  RCC_OscInitStruct.PLL.PLLN = 336;
-  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV4;
+  RCC_OscInitStruct.PLL.PLLM = 8;
+  RCC_OscInitStruct.PLL.PLLN = 84;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
   RCC_OscInitStruct.PLL.PLLQ = 7;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
@@ -221,6 +329,110 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief TIM2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM2_Init(void)
+{
+
+  /* USER CODE BEGIN TIM2_Init 0 */
+
+  /* USER CODE END TIM2_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+
+  /* USER CODE BEGIN TIM2_Init 1 */
+
+  /* USER CODE END TIM2_Init 1 */
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 83;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 249;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 125;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM2_Init 2 */
+
+  /* USER CODE END TIM2_Init 2 */
+  HAL_TIM_MspPostInit(&htim2);
+
+}
+
+/**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM3_Init(void)
+{
+
+  /* USER CODE BEGIN TIM3_Init 0 */
+
+  /* USER CODE END TIM3_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM3_Init 1 */
+
+  /* USER CODE END TIM3_Init 1 */
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 0;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 65535;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM3_Init 2 */
+
+  /* USER CODE END TIM3_Init 2 */
+
 }
 
 /**
@@ -307,13 +519,14 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, LD2_Pin|GPIO_PIN_6|GPIO_PIN_11|GPIO_PIN_12, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, LD2_Pin|GPIO_PIN_6|GPIO_PIN_7|GPIO_PIN_8
+                          |GPIO_PIN_15, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_10|GPIO_PIN_6|GPIO_PIN_9, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6|GPIO_PIN_8, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6|GPIO_PIN_7|GPIO_PIN_8, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
@@ -321,45 +534,33 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : LD2_Pin PA6 PA11 PA12 */
-  GPIO_InitStruct.Pin = LD2_Pin|GPIO_PIN_6|GPIO_PIN_11|GPIO_PIN_12;
+  /*Configure GPIO pins : LD2_Pin PA6 PA7 PA8
+                           PA15 */
+  GPIO_InitStruct.Pin = LD2_Pin|GPIO_PIN_6|GPIO_PIN_7|GPIO_PIN_8
+                          |GPIO_PIN_15;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PA7 PA8 */
-  GPIO_InitStruct.Pin = GPIO_PIN_7|GPIO_PIN_8;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : PB10 PB4 PB5 PB6
-                           PB9 */
-  GPIO_InitStruct.Pin = GPIO_PIN_10|GPIO_PIN_4|GPIO_PIN_5|GPIO_PIN_6
-                          |GPIO_PIN_9;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : PB12 PB13 PB14 */
-  GPIO_InitStruct.Pin = GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_14;
+  /*Configure GPIO pins : PB10 PB6 PB9 */
+  GPIO_InitStruct.Pin = GPIO_PIN_10|GPIO_PIN_6|GPIO_PIN_9;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PC6 PC8 */
-  GPIO_InitStruct.Pin = GPIO_PIN_6|GPIO_PIN_8;
+  /*Configure GPIO pins : PB13 PB5 */
+  GPIO_InitStruct.Pin = GPIO_PIN_13|GPIO_PIN_5;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : PC6 PC7 PC8 */
+  GPIO_InitStruct.Pin = GPIO_PIN_6|GPIO_PIN_7|GPIO_PIN_8;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : PC7 */
-  GPIO_InitStruct.Pin = GPIO_PIN_7;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
