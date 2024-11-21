@@ -117,6 +117,285 @@ void Stop_PWM(TIM_HandleTypeDef *htim, uint32_t channel) {
     HAL_TIM_PWM_Stop(htim, channel);
 }
 
+void PlayJazzyIntro(TIM_HandleTypeDef *htim, uint32_t channel, int baseFreq) {
+    // Helper macro for rests
+    #define REST(duration) Stop_PWM(htim, channel); HAL_Delay(duration); Start_PWM(htim, channel);
+
+    // Start PWM
+    Start_PWM(htim, channel);
+
+    // Smooth jazz intro (add a touch of swing)
+    Tone(baseFreq);         // Root note
+    HAL_Delay(200);                                      // Slightly swung rhythm
+    Tone(baseFreq * 6 / 5); // Minor third
+    HAL_Delay(180);
+    REST(40);                                           // Short syncopated rest
+    Tone(baseFreq * 5 / 4); // Major third
+    HAL_Delay(220);
+    Tone(baseFreq * 7 / 4); // Minor seventh
+    HAL_Delay(250);
+    REST(150);
+
+    // Funky walking bassline
+    Tone(baseFreq * 2);     // Octave
+    HAL_Delay(200);
+    Tone(baseFreq * 3 / 2); // Perfect fifth
+    HAL_Delay(150);
+    Tone(baseFreq * 4 / 3); // Jazzy fourth
+    HAL_Delay(150);
+    Tone(baseFreq * 6 / 5); // Minor third
+    HAL_Delay(150);                                      // Dramatic pause
+
+    // Swing-style improvisation
+    for (int i = 0; i < 3; i++) {
+        Tone(baseFreq * (i % 2 == 0 ? 6 / 5 : 5 / 4));  // Alternate minor/major thirds
+        HAL_Delay(180);
+        Tone(baseFreq * 3 / 2);                         // Perfect fifth
+        HAL_Delay(200);
+    }
+    REST(200);
+
+    // Bluesy ending with a jazzy trill
+    Tone(baseFreq * 7 / 4);  // Minor seventh
+    HAL_Delay(180);
+    Tone(baseFreq * 9 / 8);  // Jazzy ninth
+    HAL_Delay(150);
+    for (int i = 0; i < 6; i++) {                       // Rapid trill
+        Tone(baseFreq * 6 / 5);
+        HAL_Delay(80);
+        Tone(baseFreq * 7 / 6);                         // Blues note (minor second)
+        HAL_Delay(80);
+    }
+
+    // Strong finish
+    Tone(baseFreq);          // Root
+    HAL_Delay(300);
+    Tone(baseFreq * 3 / 2);  // Perfect fifth
+    HAL_Delay(200);
+    Tone(baseFreq * 2);      // Octave
+    HAL_Delay(600);                                       // Longer sustain for final emphasis
+
+    // Stop PWM
+    Stop_PWM(htim, channel);
+}
+
+// Note definitions
+#define a3f    208
+#define b3f    233
+#define b3     247
+#define c4     261
+#define c4s    277
+#define e4f    311
+#define f4     349
+#define a4f    415
+#define b4f    466
+#define b4     493
+#define c5     523
+#define c5s    554
+#define e5f    622
+#define f5     698
+#define f5s    740
+#define a5f    831
+#define rest   -1
+
+// Configuration
+volatile int beatlength = 100; // Tempo
+float beatseparationconstant = 0.3;
+
+int song1_chorus_melody[] =
+{ b4f, b4f, a4f, a4f,
+  f5, f5, e5f, b4f, b4f, a4f, a4f, e5f, e5f, c5s, c5, b4f,
+  c5s, c5s, c5s, c5s,
+  c5s, e5f, c5, b4f, a4f, a4f, a4f, e5f, c5s,
+  b4f, b4f, a4f, a4f,
+  f5,  f5, e5f, b4f, b4f, a4f, a4f, a5f, c5, c5s, c5, b4f,
+  c5s, c5s, c5s, c5s,
+  c5s, e5f, c5, b4f, a4f, rest, a4f, e5f, c5s, rest
+};
+
+int song1_chorus_rhythmn[]  =
+{ 1, 1, 1, 1,
+  3, 3, 6, 1, 1, 1, 1, 3, 3, 3, 1, 2,
+  1, 1, 1, 1,
+  3, 3, 3, 1, 2, 2, 2, 4, 8,
+  1, 1, 1, 1,
+  3, 3, 6, 1, 1, 1, 1, 3, 3, 3,  1, 2,
+  1, 1, 1, 1,
+  3, 3, 3, 1, 2, 2, 2, 4, 8, 4
+};
+
+
+// Usage example in your main loop or function
+void playSegment(TIM_HandleTypeDef *htim, uint32_t channel, int melody[], int rhythmn[], int length) {
+#define REST(duration) Stop_PWM(htim, channel); HAL_Delay(duration); Start_PWM(htim, channel);
+    for (int i = 0; i < length; i++) {
+        int duration = beatlength * rhythmn[i];
+        if (melody[i] == rest) {
+            REST(duration);
+        } else {
+            Tone(melody[i]);
+            HAL_Delay(duration);
+        }
+        REST(duration * beatseparationconstant);
+    }
+}
+
+// Additional Jazz Notes
+#define g3     196
+#define a3     220
+#define d4     293
+#define d4s    311
+#define g4     392
+#define a4     440
+#define d5     587
+#define g5     784
+#define a5     880
+#define d6     1174
+// Additional Notes for Bebop Flavor
+#define g3s    208
+#define d4f    277
+#define a4s    466
+#define g5s    830
+#define a5s    932
+#define d5f    622
+#define g4s	   415
+
+// Part 1: Intro (Smooth Chromatic Walks)
+int jazz_intro_melody[] = {g3, a3, b3, c4, d4, e4f, f4, g4, a4f, g4, b3, c4};
+int jazz_intro_rhythmn[] = {2, 2, 1, 2, 2, 1, 2, 4, 2, 2, 2, 4};
+
+// Part 2: Verse (Swing Feel)
+int jazz_theme_melody[] = {g4, b4, a4s, g4, f4, e4f, g4s, a4, b4, g4, f4, d4, d4f, g4, f4, e4f, d4};
+int jazz_theme_rhythmn[] = {1, 2, 2, 1, 2, 1, 2, 2, 2, 1, 2, 1, 2, 2, 2, 1, 4};
+
+// Part 3: Bridge (High Energy, Jumping Notes)
+int jazz_bridge_melody[] = {a4, c5, d5, g5, f5s, a5f, d6, b4, c5s, a4f, f5, e5f, d5, c5, b4f};
+int jazz_bridge_rhythmn[] = {4, 2, 6, 3, 2, 4, 6, 4, 3, 4, 6, 3, 2, 3, 8};
+
+// Part 4: Outro (Resolving Down to Calm)
+int jazz_outro_melody[] = {c4, b3f, a3, g3, f4, e4f, d4, c4, g3, rest, g3, a3, b3, c4};
+int jazz_outro_rhythmn[] = {8, 4, 4, 6, 4, 2, 2, 8, 6, 4, 4, 4, 4, 8};
+
+// Melody and Rhythm Arrays
+
+#define NOTE_B0  31
+#define NOTE_C1  33
+#define NOTE_CS1 35
+#define NOTE_D1  37
+#define NOTE_DS1 39
+#define NOTE_E1  41
+#define NOTE_F1  44
+#define NOTE_FS1 46
+#define NOTE_G1  49
+#define NOTE_GS1 52
+#define NOTE_A1  55
+#define NOTE_AS1 58
+#define NOTE_B1  62
+#define NOTE_C2  65
+#define NOTE_CS2 69
+#define NOTE_D2  73
+#define NOTE_DS2 78
+#define NOTE_E2  82
+#define NOTE_F2  87
+#define NOTE_FS2 93
+#define NOTE_G2  98
+#define NOTE_GS2 104
+#define NOTE_A2  110
+#define NOTE_AS2 117
+#define NOTE_B2  123
+#define NOTE_C3  131
+#define NOTE_CS3 139
+#define NOTE_D3  147
+#define NOTE_DS3 156
+#define NOTE_E3  165
+#define NOTE_F3  175
+#define NOTE_FS3 185
+#define NOTE_G3  196
+#define NOTE_GS3 208
+#define NOTE_A3  220
+#define NOTE_AS3 233
+#define NOTE_B3  247
+#define NOTE_C4  262
+#define NOTE_CS4 277
+#define NOTE_D4  294
+#define NOTE_DS4 311
+#define NOTE_E4  330
+#define NOTE_F4  349
+#define NOTE_FS4 370
+#define NOTE_G4  392
+#define NOTE_GS4 415
+#define NOTE_A4  440
+#define NOTE_AS4 466
+#define NOTE_B4  494
+#define NOTE_C5  523
+#define NOTE_CS5 554
+#define NOTE_D5  587
+#define NOTE_DS5 622
+#define NOTE_E5  659
+#define NOTE_F5  698
+#define NOTE_FS5 740
+#define NOTE_G5  784
+#define NOTE_GS5 831
+#define NOTE_A5  880
+#define NOTE_AS5 932
+#define NOTE_B5  988
+#define NOTE_C6  1047
+#define NOTE_CS6 1109
+#define NOTE_D6  1175
+#define NOTE_DS6 1245
+#define NOTE_E6  1319
+#define NOTE_F6  1397
+#define NOTE_FS6 1480
+#define NOTE_G6  1568
+#define NOTE_GS6 1661
+#define NOTE_A6  1760
+#define NOTE_AS6 1865
+#define NOTE_B6  1976
+#define NOTE_C7  2093
+#define NOTE_CS7 2217
+#define NOTE_D7  2349
+#define NOTE_DS7 2489
+#define NOTE_E7  2637
+#define NOTE_F7  2794
+#define NOTE_FS7 2960
+#define NOTE_G7  3136
+#define NOTE_GS7 3322
+#define NOTE_A7  3520
+#define NOTE_AS7 3729
+#define NOTE_B7  3951
+#define NOTE_C8  4186
+#define NOTE_CS8 4435
+#define NOTE_D8  4699
+#define NOTE_DS8 4978
+
+int melody[] = {
+    NOTE_C4, NOTE_E4, NOTE_G4, NOTE_E4,   // C-E-G-E
+    NOTE_C4, NOTE_E4, NOTE_G4, NOTE_E4,   // C-E-G-E (repeated)
+    NOTE_A3, NOTE_C4, NOTE_E4, NOTE_C4,   // A-C-E-C
+    NOTE_A3, NOTE_C4, NOTE_E4, NOTE_C4,   // A-C-E-C (repeated)
+    NOTE_G3, NOTE_B3, NOTE_D4, NOTE_B3,   // G-B-D-B
+    NOTE_G3, NOTE_B3, NOTE_D4, NOTE_B3,   // G-B-D-B (repeated)
+    NOTE_G3, NOTE_G3, NOTE_G3, NOTE_G3,   // G-G-G-G
+    NOTE_C4, NOTE_E4, NOTE_G4, NOTE_E4,   // C-E-G-E
+    NOTE_A3, NOTE_C4, NOTE_E4, NOTE_C4,   // A-C-E-C
+    NOTE_G3, NOTE_B3, NOTE_D4, NOTE_B3,   // G-B-D-B
+    NOTE_G3, NOTE_G3, NOTE_G3, NOTE_G3,   // G-G-G-G (repeat)
+};
+
+int rhythmn[] = {
+    4, 4, 4, 4,   // C-E-G-E
+    4, 4, 4, 4,   // C-E-G-E (repeated)
+    4, 4, 4, 4,   // A-C-E-C
+    4, 4, 4, 4,   // A-C-E-C (repeated)
+    4, 4, 4, 4,   // G-B-D-B
+    4, 4, 4, 4,   // G-B-D-B (repeated)
+    4, 4, 4, 4,   // G-G-G-G
+    4, 4, 4, 4,   // C-E-G-E
+    4, 4, 4, 4,   // A-C-E-C
+    4, 4, 4, 4,   // G-B-D-B
+    4, 4, 4, 4    // G-G-G-G (repeat)
+};
+
 /* USER CODE END 0 */
 
 /**
@@ -159,6 +438,19 @@ int main(void)
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
   Tone(500);
+
+//  Start_PWM(&htim2, TIM_CHANNEL_2);
+//  PlayBootUpSong(1000);
+//  Stop_PWM(&htim2, TIM_CHANNEL_2);
+//  PlayJazzyIntro(&htim2, TIM_CHANNEL_2, 500);
+  Start_PWM(&htim2, TIM_CHANNEL_2);
+
+  // Play Chorus
+  playSegment(&htim2, TIM_CHANNEL_2, song1_chorus_melody, song1_chorus_rhythmn, sizeof(song1_chorus_melody) / sizeof(int));
+
+//  playSegment(&htim2, TIM_CHANNEL_2, melody, rhythmn, sizeof(melody) / sizeof(int));
+
+  Stop_PWM(&htim2, TIM_CHANNEL_2);
   /* USER CODE END 2 */
 
   /* Infinite loop */
