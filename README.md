@@ -53,6 +53,6 @@ This project is a lockout buzzer system that is designed to be used in a quiz bo
 
 ## Contributors
 Hayat Ahmad
-Chloe Lau
 William Zeng
+Chloe Lau
 
